@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/greezi/claude-proxy-manager/main/in
 
 ```bash
 # 克隆仓库
-git clone https://github.com/YOUR_USERNAME/claude-proxy-manager.git
+git clone https://github.com/greezi/claude-proxy-manager.git
 cd claude-proxy-manager
 
 # 运行安装脚本
@@ -149,7 +149,7 @@ rm -rf ~/.claude-proxy-manager
 
 ```bash
 # 克隆仓库
-git clone https://github.com/YOUR_USERNAME/claude-proxy-manager.git
+git clone https://github.com/greezi/claude-proxy-manager.git
 cd claude-proxy-manager
 
 # 直接运行脚本
