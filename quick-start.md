@@ -3,7 +3,7 @@
 ## 一键安装
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/claude-proxy-manager/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/greezi/claude-proxy-manager/main/install.sh | bash
 ```
 
 ## 基本使用

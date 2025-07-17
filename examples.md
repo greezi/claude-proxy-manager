@@ -5,7 +5,7 @@
 ### 1. 安装工具
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/claude-proxy-manager/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/greezi/claude-proxy-manager/main/install.sh | bash
 ```
 
 ### 2. 添加第一个代理商
