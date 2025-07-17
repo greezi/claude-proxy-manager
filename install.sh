@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 # 安装路径
 INSTALL_DIR="/usr/local/bin"
 SCRIPT_NAME="claude-proxy"
-SCRIPT_URL="https://raw.githubusercontent.com/YOUR_USERNAME/claude-proxy-manager/main/claude-proxy-manager.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/greezi/claude-proxy-manager/main/claude-proxy-manager.sh"
 
 echo -e "${BLUE}Claude Code 代理商管理器 - 安装程序${NC}"
 echo "========================================"
