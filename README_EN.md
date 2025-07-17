@@ -1,5 +1,7 @@
 # Claude Code Proxy Manager
 
+> 🤖 **This project is fully developed by Claude Code**
+
 [中文文档](README.md) | **English**
 
 A command-line tool for managing multiple Claude Code proxy configurations with quick switching capabilities.
@@ -177,7 +179,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-### v1.0.0 (2025-01-17)
+### v1.0.0 (2025-07-17)
 - Initial release
 - Add/remove/update/list proxy providers
 - Quick switching functionality
