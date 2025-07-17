@@ -6,7 +6,7 @@
 
 ### 报告 Bug
 
-如果您发现了 bug，请通过 [GitHub Issues](https://github.com/YOUR_USERNAME/claude-proxy-manager/issues) 报告：
+如果您发现了 bug，请通过 [GitHub Issues](https://github.com/greezi/claude-proxy-manager/issues) 报告：
 
 1. 使用清晰、描述性的标题
 2. 详细描述重现步骤
@@ -28,7 +28,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/YOUR_USERNAME/claude-proxy-manager.git
+git clone https://github.com/greezi/claude-proxy-manager.git
 cd claude-proxy-manager
 
 # 安装依赖

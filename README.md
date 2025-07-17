@@ -20,7 +20,7 @@
 ## 一键安装
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/claude-proxy-manager/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/greezi/claude-proxy-manager/main/install.sh | bash
 ```
 
 或者手动安装：
@@ -186,4 +186,4 @@ cd claude-proxy-manager
 
 如果您觉得这个工具有用，请给个 ⭐️ Star！
 
-如有问题或建议，请提交 [Issue](https://github.com/YOUR_USERNAME/claude-proxy-manager/issues)。
+如有问题或建议，请提交 [Issue](https://github.com/greezi/claude-proxy-manager/issues)。
