@@ -9,8 +9,38 @@ CONFIG_DIR="$HOME/.claude-proxy-manager"
 PROVIDERS_FILE="$CONFIG_DIR/providers.json"
 CURRENT_FILE="$CONFIG_DIR/current"
 
-# Shell 配置文件
-SHELL_CONFIGS=("$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.zshrc")
+# Shell 配置文件 - 根据操作系统和当前shell动态确定
+get_shell_configs() {
+    local configs=()
+    
+    # 根据当前shell添加相应的配置文件
+    case "$SHELL" in
+        */bash)
+            configs+=("$HOME/.bashrc")
+            # macOS 默认读取 .bash_profile
+            [[ "$OSTYPE" == "darwin"* ]] && configs+=("$HOME/.bash_profile")
+            ;;
+        */zsh)
+            configs+=("$HOME/.zshrc")
+            ;;
+        */fish)
+            configs+=("$HOME/.config/fish/config.fish")
+            ;;
+        *)
+            # 默认配置文件
+            configs+=("$HOME/.profile")
+            [[ -f "$HOME/.bashrc" ]] && configs+=("$HOME/.bashrc")
+            [[ -f "$HOME/.zshrc" ]] && configs+=("$HOME/.zshrc")
+            ;;
+    esac
+    
+    # 确保至少有一个配置文件
+    if [[ ${#configs[@]} -eq 0 ]]; then
+        configs+=("$HOME/.profile")
+    fi
+    
+    printf '%s\n' "${configs[@]}"
+}
 
 # 颜色定义
 RED='\033[0;31m'
@@ -35,17 +65,18 @@ show_help() {
     echo "用法: claude-proxy [命令] [参数]"
     echo ""
     echo "命令:"
-    echo "  add <name> <token> <base_url>  添加新的代理商"
-    echo "  remove <name>                  删除代理商"
-    echo "  list                          列出所有代理商"
-    echo "  switch <name>                 切换到指定代理商"
-    echo "  current                       显示当前使用的代理商"
-    echo "  update <name> <token> <url>   更新代理商信息"
-    echo "  help                          显示此帮助信息"
+    echo "  add <name> <token> <base_url> [key_type]  添加新的代理商"
+    echo "                                            key_type: AUTH_TOKEN(默认) 或 API_KEY"
+    echo "  remove <name>                             删除代理商"
+    echo "  list                                      列出所有代理商"
+    echo "  switch <name>                             切换到指定代理商"
+    echo "  current                                   显示当前使用的代理商"
+    echo "  update <name> <token> <url> [key_type]    更新代理商信息"
+    echo "  help                                      显示此帮助信息"
     echo ""
     echo "示例:"
-    echo "  claude-proxy add official sk-ant-xxx https://api.anthropic.com"
-    echo "  claude-proxy add proxy1 sk-ant-yyy https://proxy1.example.com"
+    echo "  claude-proxy add official sk-ant-xxx https://api.anthropic.com API_KEY"
+    echo "  claude-proxy add proxy1 sk-ant-yyy https://proxy1.example.com AUTH_TOKEN"
     echo "  claude-proxy switch proxy1"
     echo "  claude-proxy list"
 }
@@ -54,7 +85,24 @@ show_help() {
 check_jq() {
     if ! command -v jq &> /dev/null; then
         echo -e "${RED}错误: 需要安装 jq 来处理 JSON 数据${NC}"
-        echo "请运行: brew install jq"
+        
+        # 根据操作系统提供相应的安装提示
+        case "$OSTYPE" in
+            darwin*)
+                echo "请运行: brew install jq"
+                ;;
+            linux*)
+                echo "请根据您的发行版运行以下命令之一:"
+                echo "  Ubuntu/Debian: sudo apt-get install jq"
+                echo "  CentOS/RHEL 7: sudo yum install epel-release && sudo yum install jq"
+                echo "  CentOS/RHEL 8+/Fedora: sudo dnf install jq"
+                echo "  Arch Linux: sudo pacman -S jq"
+                echo "  openSUSE: sudo zypper install jq"
+                ;;
+            *)
+                echo "请访问 https://jqlang.github.io/jq/download/ 下载安装"
+                ;;
+        esac
         exit 1
     fi
 }
@@ -64,9 +112,16 @@ add_provider() {
     local name="$1"
     local token="$2"
     local base_url="$3"
+    local key_type="${4:-AUTH_TOKEN}"  # 默认为 AUTH_TOKEN
     
     if [ -z "$name" ] || [ -z "$token" ] || [ -z "$base_url" ]; then
         echo -e "${RED}错误: 请提供完整的参数 (名称 令牌 基础URL)${NC}"
+        return 1
+    fi
+    
+    # 验证 key_type
+    if [ "$key_type" != "AUTH_TOKEN" ] && [ "$key_type" != "API_KEY" ]; then
+        echo -e "${RED}错误: key_type 必须是 AUTH_TOKEN 或 API_KEY${NC}"
         return 1
     fi
     
@@ -77,13 +132,13 @@ add_provider() {
     fi
     
     # 添加新代理商
-    local new_provider=$(jq -n --arg name "$name" --arg token "$token" --arg url "$base_url" \
-        '{name: $name, token: $token, base_url: $url}')
+    local new_provider=$(jq -n --arg name "$name" --arg token "$token" --arg url "$base_url" --arg key_type "$key_type" \
+        '{name: $name, token: $token, base_url: $url, key_type: $key_type}')
     
     jq ". += [$new_provider]" "$PROVIDERS_FILE" > "${PROVIDERS_FILE}.tmp" && \
     mv "${PROVIDERS_FILE}.tmp" "$PROVIDERS_FILE"
     
-    echo -e "${GREEN}代理商 '$name' 已添加${NC}"
+    echo -e "${GREEN}代理商 '$name' 已添加 (密钥类型: $key_type)${NC}"
 }
 
 # 删除代理商
@@ -130,12 +185,12 @@ list_providers() {
         return
     fi
     
-    jq -r '.[] | "\(.name)|\(.base_url)|\(.token[0:20])..."' "$PROVIDERS_FILE" | \
-    while IFS='|' read -r name url token; do
+    jq -r '.[] | "\(.name)|\(.base_url)|\(.token[0:20])...|\(.key_type // "AUTH_TOKEN")"' "$PROVIDERS_FILE" | \
+    while IFS='|' read -r name url token key_type; do
         if [ "$name" = "$current_provider" ]; then
-            echo -e "${GREEN}* $name${NC} - $url - $token"
+            echo -e "${GREEN}* $name${NC} - $url - $token - [${key_type}]"
         else
-            echo -e "  $name - $url - $token"
+            echo -e "  $name - $url - $token - [${key_type}]"
         fi
     done
 }
@@ -145,9 +200,16 @@ update_provider() {
     local name="$1"
     local token="$2"
     local base_url="$3"
+    local key_type="${4:-}"  # 可选参数
     
     if [ -z "$name" ] || [ -z "$token" ] || [ -z "$base_url" ]; then
         echo -e "${RED}错误: 请提供完整的参数 (名称 令牌 基础URL)${NC}"
+        return 1
+    fi
+    
+    # 验证 key_type（如果提供）
+    if [ -n "$key_type" ] && [ "$key_type" != "AUTH_TOKEN" ] && [ "$key_type" != "API_KEY" ]; then
+        echo -e "${RED}错误: key_type 必须是 AUTH_TOKEN 或 API_KEY${NC}"
         return 1
     fi
     
@@ -158,9 +220,17 @@ update_provider() {
     fi
     
     # 更新代理商
-    jq "map(if .name == \"$name\" then .token = \"$token\" | .base_url = \"$base_url\" else . end)" \
-        "$PROVIDERS_FILE" > "${PROVIDERS_FILE}.tmp" && \
-    mv "${PROVIDERS_FILE}.tmp" "$PROVIDERS_FILE"
+    if [ -n "$key_type" ]; then
+        # 如果提供了 key_type，同时更新它
+        jq "map(if .name == \"$name\" then .token = \"$token\" | .base_url = \"$base_url\" | .key_type = \"$key_type\" else . end)" \
+            "$PROVIDERS_FILE" > "${PROVIDERS_FILE}.tmp" && \
+        mv "${PROVIDERS_FILE}.tmp" "$PROVIDERS_FILE"
+    else
+        # 否则只更新 token 和 base_url
+        jq "map(if .name == \"$name\" then .token = \"$token\" | .base_url = \"$base_url\" else . end)" \
+            "$PROVIDERS_FILE" > "${PROVIDERS_FILE}.tmp" && \
+        mv "${PROVIDERS_FILE}.tmp" "$PROVIDERS_FILE"
+    fi
     
     echo -e "${GREEN}代理商 '$name' 已更新${NC}"
     
@@ -189,16 +259,37 @@ switch_provider() {
     
     local token=$(echo "$provider_info" | jq -r '.token')
     local base_url=$(echo "$provider_info" | jq -r '.base_url')
+    local key_type=$(echo "$provider_info" | jq -r '.key_type // "AUTH_TOKEN"')  # 默认为 AUTH_TOKEN
     
     # 更新环境变量
-    update_env_vars "$token" "$base_url"
+    update_env_vars "$token" "$base_url" "$key_type"
     
     # 记录当前代理商
     echo "$name" > "$CURRENT_FILE"
     
     echo -e "${GREEN}已切换到代理商: $name${NC}"
     echo -e "${BLUE}BASE_URL: $base_url${NC}"
-    echo -e "${YELLOW}请重新启动终端或运行 'source ~/.zshrc' 使配置生效${NC}"
+    echo -e "${BLUE}密钥类型: $key_type${NC}"
+    
+    # 根据当前shell提供相应的重新加载提示
+    case "$SHELL" in
+        */bash)
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                echo -e "${YELLOW}请重新启动终端或运行 'source ~/.bash_profile' 使配置生效${NC}"
+            else
+                echo -e "${YELLOW}请重新启动终端或运行 'source ~/.bashrc' 使配置生效${NC}"
+            fi
+            ;;
+        */zsh)
+            echo -e "${YELLOW}请重新启动终端或运行 'source ~/.zshrc' 使配置生效${NC}"
+            ;;
+        */fish)
+            echo -e "${YELLOW}请重新启动终端或运行 'source ~/.config/fish/config.fish' 使配置生效${NC}"
+            ;;
+        *)
+            echo -e "${YELLOW}请重新启动终端使配置生效${NC}"
+            ;;
+    esac
 }
 
 # 显示当前代理商
@@ -227,20 +318,66 @@ show_current() {
 update_env_vars() {
     local token="$1"
     local base_url="$2"
+    local key_type="${3:-AUTH_TOKEN}"  # 默认为 AUTH_TOKEN
     
-    for config_file in "${SHELL_CONFIGS[@]}"; do
+    # 获取shell配置文件列表
+    local shell_configs
+    readarray -t shell_configs < <(get_shell_configs)
+    
+    for config_file in "${shell_configs[@]}"; do
+        # 创建目录结构如果不存在（用于fish等有层级的配置文件）
+        local config_dir=$(dirname "$config_file")
+        if [ ! -d "$config_dir" ]; then
+            mkdir -p "$config_dir"
+        fi
+        
         # 创建文件如果不存在
         if [ ! -f "$config_file" ]; then
             touch "$config_file"
         fi
         
-        # 移除旧的配置
-        sed -i.bak '/^export ANTHROPIC_AUTH_TOKEN=/d' "$config_file" 2>/dev/null || true
-        sed -i.bak '/^export ANTHROPIC_BASE_URL=/d' "$config_file" 2>/dev/null || true
-        
-        # 添加新的配置
-        echo "export ANTHROPIC_AUTH_TOKEN=\"$token\"" >> "$config_file"
-        echo "export ANTHROPIC_BASE_URL=\"$base_url\"" >> "$config_file"
+        # 处理 Fish shell 配置
+        if [[ "$config_file" == *"fish"* ]]; then
+            # Fish shell 使用不同的语法
+            # 清除所有相关环境变量
+            sed -i.bak '/^set -gx ANTHROPIC_AUTH_TOKEN/d' "$config_file" 2>/dev/null || true
+            sed -i.bak '/^set -gx ANTHROPIC_API_KEY/d' "$config_file" 2>/dev/null || true
+            sed -i.bak '/^set -gx ANTHROPIC_BASE_URL/d' "$config_file" 2>/dev/null || true
+            sed -i.bak '/^set -e ANTHROPIC_AUTH_TOKEN/d' "$config_file" 2>/dev/null || true
+            sed -i.bak '/^set -e ANTHROPIC_API_KEY/d' "$config_file" 2>/dev/null || true
+            
+            # 根据类型设置正确的环境变量
+            if [ "$key_type" = "API_KEY" ]; then
+                echo "set -gx ANTHROPIC_API_KEY \"$token\"" >> "$config_file"
+                # 确保 AUTH_TOKEN 不存在
+                echo "set -e ANTHROPIC_AUTH_TOKEN" >> "$config_file"
+            else
+                echo "set -gx ANTHROPIC_AUTH_TOKEN \"$token\"" >> "$config_file"
+                # 确保 API_KEY 不存在
+                echo "set -e ANTHROPIC_API_KEY" >> "$config_file"
+            fi
+            echo "set -gx ANTHROPIC_BASE_URL \"$base_url\"" >> "$config_file"
+        else
+            # Bash/Zsh 配置
+            # 清除所有相关环境变量
+            sed -i.bak '/^export ANTHROPIC_AUTH_TOKEN=/d' "$config_file" 2>/dev/null || true
+            sed -i.bak '/^export ANTHROPIC_API_KEY=/d' "$config_file" 2>/dev/null || true
+            sed -i.bak '/^export ANTHROPIC_BASE_URL=/d' "$config_file" 2>/dev/null || true
+            sed -i.bak '/^unset ANTHROPIC_AUTH_TOKEN/d' "$config_file" 2>/dev/null || true
+            sed -i.bak '/^unset ANTHROPIC_API_KEY/d' "$config_file" 2>/dev/null || true
+            
+            # 根据类型设置正确的环境变量
+            if [ "$key_type" = "API_KEY" ]; then
+                echo "export ANTHROPIC_API_KEY=\"$token\"" >> "$config_file"
+                # 确保 AUTH_TOKEN 不存在
+                echo "unset ANTHROPIC_AUTH_TOKEN" >> "$config_file"
+            else
+                echo "export ANTHROPIC_AUTH_TOKEN=\"$token\"" >> "$config_file"
+                # 确保 API_KEY 不存在
+                echo "unset ANTHROPIC_API_KEY" >> "$config_file"
+            fi
+            echo "export ANTHROPIC_BASE_URL=\"$base_url\"" >> "$config_file"
+        fi
         
         # 删除备份文件
         rm -f "${config_file}.bak"
@@ -249,10 +386,27 @@ update_env_vars() {
 
 # 清除环境变量
 clear_env_vars() {
-    for config_file in "${SHELL_CONFIGS[@]}"; do
+    # 获取shell配置文件列表
+    local shell_configs
+    readarray -t shell_configs < <(get_shell_configs)
+    
+    for config_file in "${shell_configs[@]}"; do
         if [ -f "$config_file" ]; then
-            sed -i.bak '/^export ANTHROPIC_AUTH_TOKEN=/d' "$config_file" 2>/dev/null || true
-            sed -i.bak '/^export ANTHROPIC_BASE_URL=/d' "$config_file" 2>/dev/null || true
+            # 处理 Fish shell 配置
+            if [[ "$config_file" == *"fish"* ]]; then
+                sed -i.bak '/^set -gx ANTHROPIC_AUTH_TOKEN/d' "$config_file" 2>/dev/null || true
+                sed -i.bak '/^set -gx ANTHROPIC_API_KEY/d' "$config_file" 2>/dev/null || true
+                sed -i.bak '/^set -gx ANTHROPIC_BASE_URL/d' "$config_file" 2>/dev/null || true
+                sed -i.bak '/^set -e ANTHROPIC_AUTH_TOKEN/d' "$config_file" 2>/dev/null || true
+                sed -i.bak '/^set -e ANTHROPIC_API_KEY/d' "$config_file" 2>/dev/null || true
+            else
+                # Bash/Zsh 配置
+                sed -i.bak '/^export ANTHROPIC_AUTH_TOKEN=/d' "$config_file" 2>/dev/null || true
+                sed -i.bak '/^export ANTHROPIC_API_KEY=/d' "$config_file" 2>/dev/null || true
+                sed -i.bak '/^export ANTHROPIC_BASE_URL=/d' "$config_file" 2>/dev/null || true
+                sed -i.bak '/^unset ANTHROPIC_AUTH_TOKEN/d' "$config_file" 2>/dev/null || true
+                sed -i.bak '/^unset ANTHROPIC_API_KEY/d' "$config_file" 2>/dev/null || true
+            fi
             rm -f "${config_file}.bak"
         fi
     done
@@ -265,7 +419,7 @@ main() {
     
     case "$1" in
         "add")
-            add_provider "$2" "$3" "$4"
+            add_provider "$2" "$3" "$4" "$5"
             ;;
         "remove")
             remove_provider "$2"
@@ -280,7 +434,7 @@ main() {
             show_current
             ;;
         "update")
-            update_provider "$2" "$3" "$4"
+            update_provider "$2" "$3" "$4" "$5"
             ;;
         "help"|"--help"|"-h"|"")
             show_help

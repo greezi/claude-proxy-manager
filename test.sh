@@ -42,11 +42,26 @@ cleanup() {
     echo -e "${YELLOW}清理测试环境...${NC}"
     rm -rf ~/.claude-proxy-manager
     
-    # 清理测试添加的环境变量
-    for config_file in ~/.bash_profile ~/.bashrc ~/.zshrc; do
+    # 清理测试添加的环境变量 - 支持多种shell配置文件
+    local config_files=(
+        ~/.bash_profile 
+        ~/.bashrc 
+        ~/.zshrc 
+        ~/.profile
+        ~/.config/fish/config.fish
+    )
+    
+    for config_file in "${config_files[@]}"; do
         if [ -f "$config_file" ]; then
-            sed -i.bak '/^export ANTHROPIC_AUTH_TOKEN=/d' "$config_file" 2>/dev/null || true
-            sed -i.bak '/^export ANTHROPIC_BASE_URL=/d' "$config_file" 2>/dev/null || true
+            # 处理 Fish shell 配置
+            if [[ "$config_file" == *"fish"* ]]; then
+                sed -i.bak '/^set -gx ANTHROPIC_AUTH_TOKEN/d' "$config_file" 2>/dev/null || true
+                sed -i.bak '/^set -gx ANTHROPIC_BASE_URL/d' "$config_file" 2>/dev/null || true
+            else
+                # Bash/Zsh 配置
+                sed -i.bak '/^export ANTHROPIC_AUTH_TOKEN=/d' "$config_file" 2>/dev/null || true
+                sed -i.bak '/^export ANTHROPIC_BASE_URL=/d' "$config_file" 2>/dev/null || true
+            fi
             rm -f "${config_file}.bak"
         fi
     done
