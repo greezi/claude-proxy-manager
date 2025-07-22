@@ -18,43 +18,98 @@ SCRIPT_URL="https://raw.githubusercontent.com/greezi/claude-proxy-manager/main/c
 echo -e "${BLUE}Claude Code 代理商管理器 - 安装程序${NC}"
 echo "========================================"
 
-# 检查是否为 macOS
-if [[ "$OSTYPE" != "darwin"* ]]; then
-    echo -e "${RED}错误: 此脚本仅支持 macOS 系统${NC}"
-    exit 1
-fi
+# 检查操作系统
+detect_os() {
+    case "$OSTYPE" in
+        darwin*)
+            OS="macos"
+            ;;
+        linux*)
+            OS="linux"
+            ;;
+        *)
+            echo -e "${RED}错误: 不支持的操作系统 ($OSTYPE)${NC}"
+            echo "目前支持: macOS 和 Linux"
+            exit 1
+            ;;
+    esac
+    echo -e "${GREEN}检测到操作系统: $OS${NC}"
+}
 
-# 检查是否安装了 jq
+# 检查并安装 jq
 check_jq() {
     if ! command -v jq &> /dev/null; then
         echo -e "${YELLOW}检测到未安装 jq，正在安装...${NC}"
         
-        # 检查是否安装了 Homebrew
-        if ! command -v brew &> /dev/null; then
-            echo -e "${YELLOW}检测到未安装 Homebrew，正在安装...${NC}"
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-            
-            # 添加 Homebrew 到 PATH
-            if [[ -f "/opt/homebrew/bin/brew" ]]; then
-                echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
-                eval "$(/opt/homebrew/bin/brew shellenv)"
-            elif [[ -f "/usr/local/bin/brew" ]]; then
-                echo 'eval "$(/usr/local/bin/brew shellenv)"' >> ~/.zshrc
-                eval "$(/usr/local/bin/brew shellenv)"
-            fi
-        fi
-        
-        # 安装 jq
-        brew install jq
+        case "$OS" in
+            "macos")
+                install_jq_macos
+                ;;
+            "linux")
+                install_jq_linux
+                ;;
+        esac
         
         if ! command -v jq &> /dev/null; then
             echo -e "${RED}错误: jq 安装失败${NC}"
+            echo "请手动安装 jq 后重试"
             exit 1
         fi
         
         echo -e "${GREEN}jq 安装成功${NC}"
     else
         echo -e "${GREEN}jq 已安装${NC}"
+    fi
+}
+
+# macOS 安装 jq
+install_jq_macos() {
+    # 检查是否安装了 Homebrew
+    if ! command -v brew &> /dev/null; then
+        echo -e "${YELLOW}检测到未安装 Homebrew，正在安装...${NC}"
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        
+        # 添加 Homebrew 到 PATH
+        if [[ -f "/opt/homebrew/bin/brew" ]]; then
+            echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+        elif [[ -f "/usr/local/bin/brew" ]]; then
+            echo 'eval "$(/usr/local/bin/brew shellenv)"' >> ~/.zshrc
+            eval "$(/usr/local/bin/brew shellenv)"
+        fi
+    fi
+    
+    # 安装 jq
+    brew install jq
+}
+
+# Linux 安装 jq
+install_jq_linux() {
+    # 检测 Linux 发行版并使用相应的包管理器
+    if command -v apt-get &> /dev/null; then
+        # Debian/Ubuntu
+        echo -e "${YELLOW}使用 apt-get 安装 jq...${NC}"
+        sudo apt-get update && sudo apt-get install -y jq
+    elif command -v yum &> /dev/null; then
+        # CentOS/RHEL 7
+        echo -e "${YELLOW}使用 yum 安装 jq...${NC}"
+        sudo yum install -y epel-release && sudo yum install -y jq
+    elif command -v dnf &> /dev/null; then
+        # CentOS/RHEL 8+/Fedora
+        echo -e "${YELLOW}使用 dnf 安装 jq...${NC}"
+        sudo dnf install -y jq
+    elif command -v pacman &> /dev/null; then
+        # Arch Linux
+        echo -e "${YELLOW}使用 pacman 安装 jq...${NC}"
+        sudo pacman -S --noconfirm jq
+    elif command -v zypper &> /dev/null; then
+        # openSUSE
+        echo -e "${YELLOW}使用 zypper 安装 jq...${NC}"
+        sudo zypper install -y jq
+    else
+        echo -e "${RED}未找到支持的包管理器${NC}"
+        echo "请手动安装 jq: https://jqlang.github.io/jq/download/"
+        exit 1
     fi
 }
 
@@ -111,6 +166,10 @@ main() {
     echo -e "${YELLOW}开始安装...${NC}"
     echo ""
     
+    # 检测操作系统
+    detect_os
+    echo ""
+    
     # 检查并安装依赖
     check_jq
     echo ""
@@ -128,7 +187,11 @@ main() {
         echo "1. 添加您的第一个代理商配置"
         echo "2. 使用 'claude-proxy help' 查看完整帮助"
         echo ""
-        echo -e "${YELLOW}注意: 切换代理商后需要重启终端或运行 'source ~/.zshrc' 使配置生效${NC}"
+        if [[ "$OS" == "linux" ]]; then
+            echo -e "${YELLOW}注意: 切换代理商后需要重启终端或运行 'source ~/.bashrc' 使配置生效${NC}"
+        else
+            echo -e "${YELLOW}注意: 切换代理商后需要重启终端或运行 'source ~/.zshrc' 使配置生效${NC}"
+        fi
     else
         echo -e "${RED}安装失败，请检查错误信息${NC}"
         exit 1
